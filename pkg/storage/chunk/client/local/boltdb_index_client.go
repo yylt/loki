@@ -55,6 +55,7 @@ type BoltIndexClient struct {
 	wait   sync.WaitGroup
 }
 
+// 在schemaconfig 中 有配置 index.period 何时使用？
 // NewBoltDBIndexClient creates a new IndexClient that used BoltDB.
 func NewBoltDBIndexClient(cfg BoltDBConfig) (*BoltIndexClient, error) {
 	if err := util.EnsureDirectory(cfg.Directory); err != nil {

@@ -196,6 +196,7 @@ func NewTableManager(cfg TableManagerConfig, schemaCfg config.SchemaConfig, maxC
 }
 
 // Start the TableManager
+// backetClient 用于清理过期数据
 func (m *TableManager) starting(ctx context.Context) error {
 	if m.bucketClient != nil && m.cfg.RetentionPeriod != 0 && m.cfg.RetentionDeletesEnabled {
 		m.bucketRetentionLoop = services.NewTimerService(bucketRetentionEnforcementInterval, nil, m.bucketRetentionIteration, nil)

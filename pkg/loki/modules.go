@@ -312,18 +312,20 @@ func (t *Loki) initDistributor() (services.Service, error) {
 	return t.distributor, nil
 }
 
+// 初始化 querier
 func (t *Loki) initQuerier() (services.Service, error) {
+	// 保证查询采集器的时间范围 和 采集器设置的最大时间一致
 	if t.Cfg.Ingester.QueryStoreMaxLookBackPeriod != 0 {
 		t.Cfg.Querier.IngesterQueryStoreMaxLookback = t.Cfg.Ingester.QueryStoreMaxLookBackPeriod
 	}
 	// Querier worker's max concurrent requests must be the same as the querier setting
 	t.Cfg.Worker.MaxConcurrentRequests = t.Cfg.Querier.MaxConcurrent
-
+	// 当使用对象存储，并且使能 compactor 才会有deletestore
 	deleteStore, err := t.deleteRequestsClient("querier", t.overrides)
 	if err != nil {
 		return nil, err
 	}
-
+	// 查询 manager，后端调用Store，IngesterQuery，deleteStore
 	q, err := querier.New(t.Cfg.Querier, t.Store, t.ingesterQuerier, t.overrides, deleteStore, prometheus.DefaultRegisterer)
 	if err != nil {
 		return nil, err
@@ -360,6 +362,7 @@ func (t *Loki) initQuerier() (services.Service, error) {
 	httpMiddleware := middleware.Merge(toMerge...)
 
 	logger := log.With(util_log.Logger, "component", "querier")
+	// 查询处理接，对接到handler
 	t.querierAPI = querier.NewQuerierAPI(t.Cfg.Querier, t.Querier, t.overrides, logger)
 	queryHandlers := map[string]http.Handler{
 		"/loki/api/v1/query_range": middleware.Merge(
@@ -482,7 +485,7 @@ func (t *Loki) initTableManager() (services.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	// 当前只支持 filesystem 的配置
 	bucketClient, err := storage.NewBucketClient(t.Cfg.StorageConfig)
 	util_log.CheckFatal("initializing bucket client", err, util_log.Logger)
 
@@ -509,6 +512,9 @@ func (t *Loki) initStore() (_ services.Service, err error) {
 		t.Cfg.ChunkStoreConfig.DisableIndexDeduplication = true
 		t.Cfg.ChunkStoreConfig.WriteDedupeCacheConfig = cache.Config{}
 	}
+	// 如果索引存储 使用tsdb或者boltdb shipper类型，会有不同设置
+	// 1 write/ingester类型：设置cacheconfig 缓存中boltdbshipper和tsdbshipper 写模式
+	// 2 read/rule类型：设置 boltdbshipper和tsdbshipper 读模式
 
 	// Set configs pertaining to object storage based indices
 	if config.UsingObjectStorageIndex(t.Cfg.SchemaConfig.Configs) {
@@ -554,7 +560,7 @@ func (t *Loki) initStore() (_ services.Service, err error) {
 
 		}
 	}
-
+	// 若索引存储 使用tsdb或者boltdb shipper类型，设置？
 	if config.UsingObjectStorageIndex(t.Cfg.SchemaConfig.Configs) {
 		var asyncStore bool
 
@@ -616,7 +622,7 @@ func (t *Loki) initStore() (_ services.Service, err error) {
 			}
 			t.Cfg.Ingester.QueryStoreMaxLookBackPeriod = mlb
 		}
-
+		// 只有使用boltdb shipper类型等才可以是异步方式
 		if asyncStore {
 			t.Cfg.StorageConfig.EnableAsyncStore = true
 			t.Cfg.StorageConfig.AsyncStoreConfig = storage.AsyncStoreCfg{
@@ -628,7 +634,7 @@ func (t *Loki) initStore() (_ services.Service, err error) {
 			}
 		}
 	}
-
+	// 创建存储，分为三层 [index - chunk - dedupe]
 	t.Store, err = storage.NewStore(t.Cfg.StorageConfig, t.Cfg.ChunkStoreConfig, t.Cfg.SchemaConfig, t.overrides, t.clientMetrics, prometheus.DefaultRegisterer, util_log.Logger)
 	if err != nil {
 		return
@@ -727,6 +733,7 @@ func (t *Loki) initQueryFrontend() (_ services.Service, err error) {
 		FrontendV2:    t.Cfg.Frontend.FrontendV2,
 		DownstreamURL: t.Cfg.Frontend.DownstreamURL,
 	}
+	// frontv1 是本地，frontv2 是 mux方式，会将查询分散到多个queries上
 	roundTripper, frontendV1, frontendV2, err := frontend.InitFrontend(
 		combinedCfg,
 		scheduler.SafeReadRing(t.queryScheduler),
@@ -757,6 +764,10 @@ func (t *Loki) initQueryFrontend() (_ services.Service, err error) {
 		frontendHandler = gziphandler.GzipHandler(frontendHandler)
 	}
 
+	// 注册中间件处理
+	// ExtractQueryTags： 处理头 X-Query-Tags信息
+	// Prepopulate: 处理form信息，是否符合要求
+	// ResponseJSON 回复以json方式
 	frontendHandler = middleware.Merge(
 		httpreq.ExtractQueryTagsMiddleware(),
 		serverutil.RecoveryHTTPMiddleware,

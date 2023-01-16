@@ -82,6 +82,7 @@ type store struct {
 func NewStore(cfg Config, storeCfg config.ChunkStoreConfig, schemaCfg config.SchemaConfig,
 	limits StoreLimits, clientMetrics ClientMetrics, registerer prometheus.Registerer, logger log.Logger,
 ) (Store, error) {
+	// 从 schema 中获取当前时间应该存储方式
 	if len(schemaCfg.Configs) != 0 {
 		if index := config.ActivePeriodConfig(schemaCfg.Configs); index != -1 && index < len(schemaCfg.Configs) {
 			indexTypeStats.Set(schemaCfg.Configs[index].IndexType)
@@ -89,7 +90,7 @@ func NewStore(cfg Config, storeCfg config.ChunkStoreConfig, schemaCfg config.Sch
 			schemaStats.Set(schemaCfg.Configs[index].Schema)
 		}
 	}
-
+	// 初始化三层cache，index/writededupe/chunk
 	indexReadCache, err := cache.New(cfg.IndexQueriesCacheConfig, registerer, logger, stats.IndexCache)
 	if err != nil {
 		return nil, err
@@ -123,6 +124,7 @@ func NewStore(cfg Config, storeCfg config.ChunkStoreConfig, schemaCfg config.Sch
 	if err != nil {
 		return nil, errors.Wrap(err, "error loading schema config")
 	}
+	// 主要配置是 limit.max_query_length (默认721h)
 	stores := stores.NewCompositeStore(limits)
 
 	s := &store{
@@ -144,6 +146,8 @@ func NewStore(cfg Config, storeCfg config.ChunkStoreConfig, schemaCfg config.Sch
 		logger: logger,
 		limits: limits,
 	}
+	// 根据schema 创建 store (compositeStoreEntry)，并加入到 CompositeStore（store Manage） 中
+
 	if err := s.init(); err != nil {
 		return nil, err
 	}
@@ -264,7 +268,8 @@ func (s *store) storeForPeriod(p config.PeriodConfig, chunkClient client.Client,
 				backupStoreStop()
 			}, nil
 	}
-
+	// 根据 schema 配置的indexType 创建 idx
+	// 通常使用 boltdb-shipper 或者 boltdb，推荐使用 blotdb-shipper
 	idx, err := NewIndexClient(p.IndexType, s.cfg, s.schemaCfg, s.limits, s.clientMetrics, nil, indexClientReg)
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "error creating index client")
@@ -363,7 +368,9 @@ func (s *store) lazyChunks(ctx context.Context, matchers []*labels.Matcher, from
 	}
 
 	stats := stats.FromContext(ctx)
-
+	// composite_store.GetChunkRefs 根据schmaconfig 中from - to 列举store_entry
+	// store_entry.GetChunkRefs -> indexreader.GetChunkRefs
+	// 每个 store_entry 对应一个 fetcher
 	chks, fetchers, err := s.GetChunkRefs(ctx, userID, from, through, matchers...)
 	if err != nil {
 		return nil, err

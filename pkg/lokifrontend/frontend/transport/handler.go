@@ -125,6 +125,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = io.NopCloser(io.TeeReader(r.Body, &buf))
 
 	startTime := time.Now()
+	// 请求转发给 roundTripper 处理
 	resp, err := f.roundTripper.RoundTrip(r)
 	queryResponseTime := time.Since(startTime)
 
@@ -151,6 +152,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if shouldReportSlowQuery || f.cfg.QueryStatsEnabled {
 		queryString = f.parseRequestQueryString(r, buf)
 	}
+	// 记录查询耗时，记录慢查询信息
 
 	if shouldReportSlowQuery {
 		f.reportSlowQuery(r, queryString, queryResponseTime)

@@ -184,7 +184,7 @@ func NewIndexClient(name string, cfg Config, schemaCfg config.SchemaConfig, limi
 		if err != nil {
 			return nil, err
 		}
-
+		// 根据 schema 中多个配置，设置索引时间片
 		tableRanges := getIndexStoreTableRanges(config.BoltDBShipperType, schemaCfg.Configs)
 
 		boltDBIndexClientWithShipper, err = shipper.NewShipper(cfg.BoltDBShipperConfig, objectClient, limits,
@@ -247,10 +247,12 @@ func NewChunkClient(name string, cfg Config, schemaCfg config.SchemaConfig, clie
 	case config.StorageTypeCassandra:
 		return cassandra.NewObjectClient(cfg.CassandraStorageConfig, schemaCfg, registerer, cfg.MaxParallelGetChunk)
 	case config.StorageTypeFileSystem:
+		// store 截断方式打开，写入object执行 sync-close
 		store, err := local.NewFSObjectClient(cfg.FSConfig)
 		if err != nil {
 			return nil, err
 		}
+		// store 是处理单个chunk，下面创建的MaxParaClient 是处理 multi chunk
 		return client.NewClientWithMaxParallel(store, client.FSEncoder, cfg.MaxParallelGetChunk, schemaCfg), nil
 	case config.StorageTypeGrpc:
 		return grpc.NewStorageClient(cfg.GrpcConfig, schemaCfg)

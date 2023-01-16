@@ -87,6 +87,8 @@ func New(cacher cache.Cache, cacheStubs bool, schema config.SchemaConfig, storag
 	}
 
 	c.wait.Add(chunkDecodeParallelism)
+	// 并行的解码器，读取 decodeRequest 通道中，并写入 request.Response
+
 	for i := 0; i < chunkDecodeParallelism; i++ {
 		go c.worker()
 	}

@@ -124,7 +124,7 @@ func (q *SingleTenantQuerier) SelectLogs(ctx context.Context, params logql.Selec
 	if err != nil {
 		level.Error(spanlogger.FromContext(ctx)).Log("msg", "failed loading deletes for user", "err", err)
 	}
-
+	// 计算哪些从采集器查询，哪些从store查询
 	ingesterQueryInterval, storeQueryInterval := q.buildQueryIntervals(params.Start, params.End)
 
 	iters := []iter.EntryIterator{}
@@ -275,7 +275,9 @@ func (q *SingleTenantQuerier) buildQueryIntervals(queryStart, queryEnd time.Time
 		// IngesterQueryStoreMaxLookback takes the precedence over QueryIngestersWithin while also limiting the store query range.
 		limitQueryInterval = true
 	}
-
+	// 配置的参数
+	//  querier.query_ingesters_within
+	//  ingester.query_store_max_look_back_period
 	ingesterMLB := q.calculateIngesterMaxLookbackPeriod()
 
 	// query ingester for whole duration.
@@ -289,15 +291,18 @@ func (q *SingleTenantQuerier) buildQueryIntervals(queryStart, queryEnd time.Time
 			// query only ingesters.
 			return i, nil
 		}
+		// 如果都设置为0，会被设置为从 store 和 ingest 都查询，且时间都是从start-end
 
 		// query both stores and ingesters without limiting the query interval.
 		return i, i
 	}
-
+	// 优先使用配置query_store_max_look_back_period，之后是
+	// query_ingesters_within 配置，在
 	ingesterQueryWithinRange := q.isWithinIngesterMaxLookbackPeriod(ingesterMLB, queryEnd)
 
 	// see if there is an overlap between ingester query interval and actual query interval, if not just do the store query.
 	if !ingesterQueryWithinRange {
+		// 只从 store 中查询
 		return nil, &interval{
 			start: queryStart,
 			end:   queryEnd,

@@ -155,7 +155,7 @@ func (ev *DefaultEvaluator) Iterator(ctx context.Context, expr syntax.LogSelecto
 			Shards:    q.Shards(),
 		},
 	}
-
+	// instant类型， 忽略start设置，并固定为now-maxLookbackPeriod
 	if GetRangeType(q) == InstantType {
 		params.Start = params.Start.Add(-ev.maxLookBackPeriod)
 	}

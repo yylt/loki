@@ -58,6 +58,9 @@ var base64Encoder = func(key string) string {
 	return base64.StdEncoding.EncodeToString([]byte(key))
 }
 
+// 文件系统方式的编码
+// v12 及之前，base64({userID}/{fp}:{from}:{through}:{sum})
+// v12 {userID}/base64({fp}:{from}:{through}:{sum})
 var FSEncoder = func(schema config.SchemaConfig, chk chunk.Chunk) string {
 	// Filesystem encoder pre-v12 encodes the chunk as one base64 string.
 	// This has the downside of making them opaque and storing all chunks in a single

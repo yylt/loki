@@ -55,6 +55,7 @@ type QuerierAPI struct {
 
 // NewQuerierAPI returns an instance of the QuerierAPI.
 func NewQuerierAPI(cfg Config, querier Querier, limits *validation.Overrides, logger log.Logger) *QuerierAPI {
+	// querierApi - engine(DefaultEvaluator) - querier
 	engine := logql.NewEngine(cfg.Engine, querier, limits, logger)
 	return &QuerierAPI{
 		cfg:     cfg,
@@ -73,6 +74,7 @@ func (q *QuerierAPI) RangeQueryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	// 校验limit 是否大于 limits.max_entries_limit_per_query
 	if err := q.validateEntriesLimits(ctx, request.Query, request.Limit); err != nil {
 		serverutil.WriteError(err, w)
 		return
@@ -88,7 +90,11 @@ func (q *QuerierAPI) RangeQueryHandler(w http.ResponseWriter, r *http.Request) {
 		request.Limit,
 		request.Shards,
 	)
+	// 解析 lokiql, engine
+	// 创建 query实例，这个是否有必要呢？
 	query := q.engine.Query(params)
+	// 执行查询 exec - eval - evalVector/evalSample/evalLiteral -
+	// querier.Select*
 	result, err := query.Exec(ctx)
 	if err != nil {
 		serverutil.WriteError(err, w)
